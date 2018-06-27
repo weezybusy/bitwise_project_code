@@ -1,0 +1,30 @@
+All the C data structures you'll ever need.
+-------------------------------------------------------------------------------
+1. Stretchy buffers
+// 2. Pointer/uintptr hash table (uintptr -> uintptr key-value mapping)
+3. String intern table
+-------------------------------------------------------------------------------
+
+
+String intern table notes:
+-------------------------------------------------------------------------------
+
+char x[] = "asdf";
+char y[] = "asdf";
+
+// linear time in min(strlen(x), strlen(y))
+if (strcmp(x, y) == 0) {
+
+}
+
+const char *str_intern(const char *str) has the property
+  str_intern(x) == str_intern(y) iff strcmp(x, y) == 0 (equal as strings).
+
+str_intern(x) returns a "stable pointer".
+
+Once you've interned a string buffer, you can do string equality by just using
+  pointer equality.
+
+symbol table: intern string at read time, then do pointer-based lookup in hash
+  table.
+-------------------------------------------------------------------------------
