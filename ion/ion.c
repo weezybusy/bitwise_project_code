@@ -103,6 +103,7 @@ str_intern_range(const char *start, const char *end)
                 if (interns[i].len == len && strcmp(interns[i].str, str) == 0) {
                         return interns[i].str;
                 }
+        }
 }
 
 typedef enum TokenKind {
