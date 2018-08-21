@@ -360,7 +360,7 @@ lex_test(void)
 }
 
 // expr3 = INT | '(' expr ')'
-// expr2 = [-]expr3
+// expr2 = [-]expr2 | expr3
 // expr1 = expr2 ([/*] expr2)*
 // expr0 = expr1 ([-+] expr1)*
 // expr = expr0
@@ -391,7 +391,7 @@ int
 parse_expr2(void)
 {
         if (match_token('-')) {
-                return -parse_expr3();
+                return -parse_expr2();
         } else {
                 return parse_expr3();
         }
