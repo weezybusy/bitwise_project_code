@@ -1,5 +1,7 @@
 #include <assert.h>
 #include <ctype.h>
+#include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -32,6 +34,17 @@ xrealloc(void *ptr, size_t num_bytes)
         return ptr;
 }
 
+void fatal(const char *fmt, ...)
+{
+        va_list args;
+        va_start(args, fmt);
+        printf("FATAL: ");
+        vprintf(fmt, args);
+        printf("\n");
+        va_end(args);
+        exit(1);
+}
+
 #define buf__hdr(b)     ((BufHdr *)((char *)(b) - offsetof(BufHdr, buf)))
 #define buf__fits(b, n) (buf_len(b) + (n) <= buf_cap(b))
 #define buf__fit(b, n)  (buf__fits((b), (n)) ? 0 : ((b) = buf__grow((b), buf_len(b) + (n), sizeof(*(b)))))
@@ -57,9 +70,9 @@ buf__grow(const void *buf, size_t new_len, size_t elem_size)
         new_cap = MAX(1 + 2 * buf_cap(buf), new_len);
         new_size = (new_cap * elem_size) + offsetof(BufHdr, buf);
 
-        if (buf)
+        if (buf) {
                 new_hdr = xrealloc(buf__hdr(buf), new_size);
-        else {
+        } else {
                 new_hdr = xmalloc(new_size);
                 new_hdr->len = 0;
         }
@@ -103,6 +116,7 @@ str_intern_range(const char *start, const char *end)
 {
         size_t len;
         char *str;
+        InternStr new_intern_str;
 
         len = end - start;
         for (size_t i = 0; i < buf_len(interns); ++i) {
@@ -114,7 +128,11 @@ str_intern_range(const char *start, const char *end)
         str = xmalloc(len + 1);
         memcpy(str, start, len);
         str[len] = 0;
-        buf_push(interns, ((InternStr) { len, str }));
+
+        new_intern_str.len = len;
+        new_intern_str.str = str;
+        buf_push(interns, new_intern_str);
+
         return str;
 }
 
@@ -129,9 +147,14 @@ str_intern_test()
 {
         char x[] = "hello";
         char y[] = "hello";
-
         assert(x != y);
-        //assert(str_intern(x) == str_intern(y));
+        const char *px = str_intern(x);
+        const char *py = str_intern(y);
+        assert(px == py);
+
+        char z[] = "hello!";
+        const char *pz = str_intern(z);
+        assert(pz != px);
 }
 
 typedef enum TokenKind {
@@ -139,12 +162,37 @@ typedef enum TokenKind {
         TOKEN_NAME
 } TokenKind;
 
+// Warning: this returns a pointer to a static internal buffer, so it'll be
+//          overwritten next call.
+const char *token_kind_name(TokenKind kind)
+{
+        static char buf[256];
+
+        switch (kind) {
+        case TOKEN_INT:
+                sprintf(buf, "%s", "integer");
+                break;
+        case TOKEN_NAME:
+                sprintf(buf, "%s", "name");
+                break;
+        default:
+                if (kind < 128 && isprint(kind)) {
+                        sprintf(buf, "%c", kind);
+                } else {
+                        sprintf(buf, "<ASCII %d>", kind);
+                }
+                break;
+        }
+        return buf;
+}
+
 typedef struct Token {
         TokenKind kind;
         const char *start;
         const char *end;
         union {
-                uint64_t val;
+                int val;
+                const char *name;
         };
 } Token;
 
@@ -154,7 +202,7 @@ const char *stream;
 void
 next_token(void)
 {
-        uint64_t val;
+        int val;
 
         token.start = stream;
         switch (*stream) {
@@ -229,8 +277,8 @@ next_token(void)
                 token.start = stream;
                 while (isalnum(*stream) || *stream == '_')
                         stream++;
-                token.end = stream;
                 token.kind = TOKEN_NAME;
+                token.name = str_intern_range(token.start, stream);
                 break;
         default:
                 token.kind = *stream++;
@@ -240,34 +288,188 @@ next_token(void)
 }
 
 void
+init_stream(const char *str)
+{
+        stream = str;
+        next_token();
+}
+
+void
 print_token(Token token)
 {
         switch (token.kind) {
-                case TOKEN_INT:
-                        printf("TOKEN INT: %lu\n", token.val);
-                        break;
-                case TOKEN_NAME:
-                        printf("TOKEN NAME: %.*s\n",
-                                        (int) (token.end - token.start),
-                                        token.start);
-                        break;
-                default:
-                        printf("TOKEN '%c'\n", token.kind);
-                        break;                        
+        case TOKEN_INT:
+                printf("TOKEN INT: %d\n", token.val);
+                break;
+        case TOKEN_NAME:
+                printf("TOKEN NAME: %.*s\n",
+                                (int) (token.end - token.start), token.start);
+                break;
+        default:
+                printf("TOKEN '%c'\n", token.kind);
+                break;                        
+        }
+}
+
+bool
+is_token(TokenKind kind)
+{
+        return token.kind == kind;
+}
+
+bool
+is_token_name(const char *name)
+{
+        return token.kind == TOKEN_NAME && token.name == name;
+}
+
+bool
+match_token(TokenKind kind)
+{
+        if (is_token(kind)) {
+                next_token();
+                return true;
+        } else {
+                return false;
+        }
+}
+
+bool
+expect_token(TokenKind kind)
+{
+        if (is_token(kind)) {
+                next_token();
+                return true;
+        } else {
+                fatal("expected token %s got %s\n", token_kind_name(kind),
+                                token_kind_name(token.kind));
+                return false;
         }
 }
 
 void
 lex_test(void)
 {
-        char *source = "+()_HELLO1,234+FOO!567";
+        char *source = "XY+(XY)_HELLO1,234+FOO!567";
         stream = source;
         next_token();
         while (token.kind) {
-                print_token(token);
+                // print_token(token);
                 next_token();
         }
 }
+
+// expr3 = INT | '(' expr ')'
+// expr2 = [-]expr3
+// expr1 = expr2 ([/*] expr2)*
+// expr0 = expr1 ([-+] expr1)*
+// expr = expr0
+
+int
+parse_expr(void);
+
+int
+parse_expr3(void)
+{
+        int val;
+
+        if (is_token(TOKEN_INT)) {
+                val = token.val;
+                next_token();
+        } else if (match_token('(')) {
+                val = parse_expr();
+                expect_token(')');
+        } else {
+                fatal("expected integer or (, got %s",
+                                token_kind_name(token.kind));
+                val = 0;
+        }
+        return val;
+}
+
+int
+parse_expr2(void)
+{
+        if (match_token('-')) {
+                return -parse_expr3();
+        } else {
+                return parse_expr3();
+        }
+}
+
+int
+parse_expr1(void)
+{
+        char op;
+        int val;
+        int rval;
+
+        val = parse_expr2();
+        while (is_token('*') || is_token('/')) {
+                op = token.kind;
+                next_token();
+                rval = parse_expr2();
+                if (op == '*') {
+                        val *= rval;
+                } else {
+                        assert(op == '/');
+                        assert(rval != 0);
+                        val /= rval;
+                }
+        }
+        return val;
+}
+
+int
+parse_expr0(void)
+{
+        char op;
+        int val;
+        int rval;
+
+        val = parse_expr1();
+        while (is_token('+') || is_token('-')) {
+                op = token.kind;
+                next_token();
+                rval = parse_expr1();
+                if (op == '+') {
+                        val += rval;
+                } else {
+                        assert(op == '-');
+                        val -= rval;
+                }
+        }
+        return val;
+}
+
+int
+parse_expr(void)
+{
+        return parse_expr0();
+}
+
+int
+parse_expr_str(const char *expr)
+{
+        init_stream(expr);
+        return parse_expr();
+}
+
+#define TEST_EXPR(x) assert(parse_expr_str(#x) == (x))
+
+void
+parse_test(void)
+{
+        TEST_EXPR(1);
+        TEST_EXPR((1));
+        TEST_EXPR(-1);
+        TEST_EXPR(1-2-3);
+        TEST_EXPR(2*3+4*5);
+        TEST_EXPR(2*(3+4)*5);
+        TEST_EXPR(2+-3);
+}
+
+#undef TEST_EXPR
 
 int
 main(int argc, char **argv)
@@ -275,6 +477,7 @@ main(int argc, char **argv)
         buf_test();
         lex_test();
         str_intern_test();
+        parse_test();
 
         return 0;
 }
