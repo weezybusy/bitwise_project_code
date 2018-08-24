@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <ctype.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -34,7 +35,8 @@ xrealloc(void *ptr, size_t num_bytes)
         return ptr;
 }
 
-void fatal(const char *fmt, ...)
+void
+fatal(const char *fmt, ...)
 {
         va_list args;
         va_start(args, fmt);
@@ -45,15 +47,29 @@ void fatal(const char *fmt, ...)
         exit(1);
 }
 
-#define buf__hdr(b)     ((BufHdr *)((char *)(b) - offsetof(BufHdr, buf)))
-#define buf__fits(b, n) (buf_len(b) + (n) <= buf_cap(b))
-#define buf__fit(b, n)  (buf__fits((b), (n)) ? 0 : ((b) = buf__grow((b), buf_len(b) + (n), sizeof(*(b)))))
+void
+syntax_error(const char *fmt, ...)
+{
+        va_list args;
+        va_start(args, fmt);
+        printf("SYNTAX ERROR: ");
+        vprintf(fmt, args);
+        printf("\n");
+        va_end(args);
+        exit(1);
+}
 
-#define buf_len(b)      ((b) ? buf__hdr(b)->len : 0)
-#define buf_cap(b)      ((b) ? buf__hdr(b)->cap : 0)
-#define buf_end(b)      ((b) + buf_len(b))
-#define buf_free(b)     ((b) ? (free(buf__hdr(b)), (b) = NULL) : 0)
-#define buf_push(b, ...)  (buf__fit((b), 1), (b)[buf__hdr(b)->len++] = (__VA_ARGS__))
+#define buf__hdr(b)      ((BufHdr *) ((char *) (b) - offsetof(BufHdr, buf)))
+#define buf__fits(b, n)  (buf_len(b) + (n) <= buf_cap(b))
+#define buf__fit(b, n)   (buf__fits((b), (n)) ? 0 : ((b) = buf__grow((b), \
+                                buf_len(b) + (n), sizeof(*(b)))))
+
+#define buf_len(b)       ((b) ? buf__hdr(b)->len : 0)
+#define buf_cap(b)       ((b) ? buf__hdr(b)->cap : 0)
+#define buf_end(b)       ((b) + buf_len(b))
+#define buf_free(b)      ((b) ? (free(buf__hdr(b)), (b) = NULL) : 0)
+#define buf_push(b, ...) (buf__fit((b), 1), \
+                (b)[buf__hdr(b)->len++] = (__VA_ARGS__))
 
 typedef struct {
         size_t len;
@@ -69,11 +85,9 @@ buf__grow(const void *buf, size_t new_len, size_t elem_size)
         BufHdr *new_hdr;
 
         assert(buf_cap(buf) <= (SIZE_MAX - 1) / 2);
-
         new_cap = MAX(1 + 2 * buf_cap(buf), new_len);
         assert(new_len <= new_cap);
         assert(new_cap <= (SIZE_MAX - offsetof(BufHdr, buf)) / elem_size);
-
         new_size = (new_cap * elem_size) + offsetof(BufHdr, buf);
 
         if (buf) {
@@ -176,6 +190,7 @@ copy_token_kind_str(char *dest, size_t dest_size, TokenKind kind)
         size_t n;
 
         n = 0;
+
         switch (kind) {
         case END_OF_FILE:
                 n = snprintf(dest, dest_size, "end of file");
@@ -215,7 +230,7 @@ typedef struct Token {
         const char *start;
         const char *end;
         union {
-                int val;
+                uint64_t int_val;
                 const char *name;
         };
 } Token;
@@ -236,22 +251,86 @@ init_keywords(void)
         // ...
 }
 
+uint8_t char_to_digit[256] = {
+        ['0'] = 0,
+        ['1'] = 1,
+        ['2'] = 2,
+        ['3'] = 3,
+        ['4'] = 4,
+        ['5'] = 5,
+        ['6'] = 6,
+        ['7'] = 7,
+        ['8'] = 8,
+        ['9'] = 9,
+        ['a'] = 10, ['A'] = 10,
+        ['b'] = 11, ['B'] = 11,
+        ['c'] = 12, ['C'] = 12,
+        ['d'] = 13, ['D'] = 13,
+        ['e'] = 14, ['E'] = 14,
+        ['f'] = 15, ['F'] = 15
+};
+
+uint64_t
+scan_int(void)
+{
+        uint64_t base;
+        uint64_t val;
+        uint64_t digit;
+
+        base = 10;
+        val = 0;
+
+        if (*stream == '0') {
+                ++stream;
+                if (tolower(*stream) == 'x') {
+                        ++stream;
+                        base = 16;
+                } else {
+                        syntax_error("Invalid integer literal suffix '%c'",
+                                        *stream);
+                        ++stream;
+                }
+        }
+
+        while (1) {
+                digit = char_to_digit[(int) *stream];
+                if (digit == 0 && *stream != '0') {
+                        break;
+                }
+
+                if (digit >= base) {
+                        syntax_error("Digit '%c' out of range for base %llu",
+                                        *stream, base);
+                        digit = 0;
+                }
+
+                if (val > (UINT64_MAX - digit)/base) {
+                        syntax_error("Integer literal overflow");
+                        while (isdigit(*stream)) {
+                                ++stream;
+                        }
+                        val = 0;
+                }
+                val = val * base + digit;
+                ++stream;
+        }
+        return val;
+}
+
 void
 next_token(void)
 {
-        int val;
-
         token.start = stream;
+
+        while (isspace(*stream)) {
+                ++stream;
+        }
+
         switch (*stream) {
-        case '1': case '2': case '3': case '4': case '5': case '6': case '7':
-        case '8': case '9':
-                val = 0;
-                while (isdigit(*stream)) {
-                        val *= 10;
-                        val += *stream++ - '0';
-                }
+        case '0': case '1': case '2': case '3': case '4': case '5': case '6':
+        case '7': case '8': case '9':
                 token.kind = TOKEN_INT;
-                token.val = val;
+                token.int_val = scan_int();
                 break;
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
         case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n':
@@ -270,6 +349,7 @@ next_token(void)
                 token.kind = *stream++;
                 break;
         }
+
         token.end = stream;
 }
 
@@ -285,7 +365,7 @@ print_token(Token token)
 {
         switch (token.kind) {
         case TOKEN_INT:
-                printf("TOKEN INT: %d\n", token.val);
+                printf("TOKEN INT: %lu\n", token.int_val);
                 break;
         case TOKEN_NAME:
                 printf("TOKEN NAME: %.*s\n",
@@ -338,13 +418,28 @@ expect_token(TokenKind kind)
 
 #define assert_token(x)      assert(match_token(x))
 #define assert_token_name(x) assert(token.name == str_intern(x) && \
-                match_token(TOKEN_NAME))
-#define assert_token_int(x)  assert(token.val == (x) && match_token(TOKEN_INT))
+                                                match_token(TOKEN_NAME))
+#define assert_token_int(x)  assert(token.int_val == (x) && \
+                                                match_token(TOKEN_INT))
 #define assert_token_eof()   assert(is_token(0))
 
 void
 lex_test(void)
 {
+        // Make sure UINT64_MAX doesn't trigger overflow.
+        init_stream("18446744073709551615");
+        assert_token_int(18446744073709551615ull);
+        assert_token_eof();
+
+        init_stream("0xffffffffffffffff");
+        assert_token_int(0xffffffffffffffffull);
+        assert_token_eof();
+
+        init_stream("18446744073709551615 0xffffffffffffffff");
+        assert_token_int(18446744073709551615ull);
+        assert_token_int(0xffffffffffffffffull);
+        assert_token_eof();
+
         const char *str = "XY+(XY)_HELLO1,234+994";
         init_stream(str);
         assert_token_name("XY");
@@ -365,129 +460,13 @@ lex_test(void)
 #undef assert_token_int
 #undef assert_token_eof
 
-#if 0
-        expr3 = INT | '(' expr ')'
-        expr2 = '-' expr2 | expr3
-        expr1 = expr2 ([*/] expr2)*
-        expr0 = expr1 ([+-] expr1)*
-        expr = expr0
-#endif
-
-int
-parse_expr(void);
-
-int
-parse_expr3(void)
-{
-        int val;
-
-        if (is_token(TOKEN_INT)) {
-                val = token.val;
-                next_token();
-        } else if (match_token('(')) {
-                val = parse_expr();
-                expect_token(')');
-        } else {
-                fatal("expected integer or (, got %s",
-                                token_kind_str(token.kind));
-                val = 0;
-        }
-        return val;
-}
-
-int
-parse_expr2(void)
-{
-        if (match_token('-')) {
-                return -parse_expr2();
-        } else if (match_token('+')) {
-                return parse_expr2();
-        } else {
-                return parse_expr3();
-        }
-}
-
-int
-parse_expr1(void)
-{
-        char op;
-        int val;
-        int rval;
-
-        val = parse_expr2();
-        while (is_token('*') || is_token('/')) {
-                op = token.kind;
-                next_token();
-                rval = parse_expr2();
-                if (op == '*') {
-                        val *= rval;
-                } else {
-                        assert(op == '/');
-                        assert(rval != 0);
-                        val /= rval;
-                }
-        }
-        return val;
-}
-
-int
-parse_expr0(void)
-{
-        char op;
-        int val;
-        int rval;
-
-        val = parse_expr1();
-        while (is_token('+') || is_token('-')) {
-                op = token.kind;
-                next_token();
-                rval = parse_expr1();
-                if (op == '+') {
-                        val += rval;
-                } else {
-                        assert(op == '-');
-                        val -= rval;
-                }
-        }
-        return val;
-}
-
-int
-parse_expr(void)
-{
-        return parse_expr0();
-}
-
-int
-parse_expr_str(const char *str)
-{
-        init_stream(str);
-        return parse_expr();
-}
-
-#define assert_expr(x) assert(parse_expr_str(#x) == (x))
-
-void
-parse_test(void)
-{
-        assert_expr(1);
-        assert_expr((1));
-        assert_expr(-+1);
-        assert_expr(1-2-3);
-        assert_expr(2*3+4*5);
-        assert_expr(2*(3+4)*5);
-        assert_expr(2+-3);
-}
-
-#undef assert_expr
-
 void
 run_tests(void)
 {
         buf_test();
         lex_test();
         str_intern_test();
-        parse_test();
+        // parse_test();
 }
 
 int
