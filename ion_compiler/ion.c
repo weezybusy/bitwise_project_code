@@ -69,7 +69,7 @@ syntax_error(const char *fmt, ...)
 #define buf_end(b)       ((b) + buf_len(b))
 #define buf_free(b)      ((b) ? (free(buf__hdr(b)), (b) = NULL) : 0)
 #define buf_push(b, ...) (buf__fit((b), 1), \
-                (b)[buf__hdr(b)->len++] = (__VA_ARGS__))
+                                (b)[buf__hdr(b)->len++] = (__VA_ARGS__))
 
 typedef struct {
         size_t len;
@@ -285,6 +285,11 @@ scan_int(void)
                 if (tolower(*stream) == 'x') {
                         ++stream;
                         base = 16;
+                } else if (tolower(*stream) == 'b') {
+                        ++stream;
+                        base = 2;
+                } else if (isdigit(*stream)) {
+                        base = 8;
                 } else {
                         syntax_error("Invalid integer literal suffix '%c'",
                                         *stream);
@@ -426,18 +431,12 @@ expect_token(TokenKind kind)
 void
 lex_test(void)
 {
-        // Make sure UINT64_MAX doesn't trigger overflow.
-        init_stream("18446744073709551615");
-        assert_token_int(18446744073709551615ull);
-        assert_token_eof();
-
-        init_stream("0xffffffffffffffff");
-        assert_token_int(0xffffffffffffffffull);
-        assert_token_eof();
-
-        init_stream("18446744073709551615 0xffffffffffffffff");
-        assert_token_int(18446744073709551615ull);
-        assert_token_int(0xffffffffffffffffull);
+        // Integer literal tests.
+        init_stream("18446744073709551615 0xffffffffffffffff 042 0b1111");
+        assert_token_int(18446744073709551615ULL);
+        assert_token_int(0xffffffffffffffffULL);
+        assert_token_int(042);
+        assert_token_int(0xf);
         assert_token_eof();
 
         const char *str = "XY+(XY)_HELLO1,234+994";
