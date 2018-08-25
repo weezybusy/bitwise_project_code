@@ -36,7 +36,8 @@ DIF_ASSIGN    = '/='
 MOD_ASSIGN    = '%='
 
 Names/literals:
-NAME = [a-zA-Z_][a-zA-Z0-9_]*
-INT  = [1-9][0-9]* | 0[xX][0-9a-fA-F]+
-CHAR = '\'' . '\''
+NAME  = [a-zA-Z_][a-zA-Z0-9_]*
+INT   = [1-9][0-9]* | 0[xX][0-9a-fA-F]+
+FLOAT = [0-9]*[.][0-9]*([eE][+-]?[0-9]+)?
+CHAR  = '\'' . '\''
 STR  = '"' [^"]* '"'

@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -180,6 +181,7 @@ typedef enum TokenKind {
         // Reserve first 128 values for one-char tokens.
         TOKEN_LAST_CHAR = 127,
         TOKEN_INT,
+        TOKEN_FLOAT,
         TOKEN_NAME
         // ...
 } TokenKind;
@@ -197,6 +199,9 @@ copy_token_kind_str(char *dest, size_t dest_size, TokenKind kind)
                 break;
         case TOKEN_INT:
                 n = snprintf(dest, dest_size, "integer");
+                break;
+        case TOKEN_FLOAT:
+                n = snprintf(dest, dest_size, "float");
                 break;
         case TOKEN_NAME:
                 n = snprintf(dest, dest_size, "name");
@@ -231,6 +236,7 @@ typedef struct Token {
         const char *end;
         union {
                 uint64_t int_val;
+                double float_val;
                 const char *name;
         };
 } Token;
@@ -291,7 +297,7 @@ scan_int(void)
                 } else if (isdigit(*stream)) {
                         base = 8;
                 } else {
-                        syntax_error("Invalid integer literal suffix '%c'",
+                        syntax_error("Invalid integer literal suffix '%c'.",
                                         *stream);
                         ++stream;
                 }
@@ -304,13 +310,13 @@ scan_int(void)
                 }
 
                 if (digit >= base) {
-                        syntax_error("Digit '%c' out of range for base %llu",
+                        syntax_error("Digit '%c' out of range for base %llu.",
                                         *stream, base);
                         digit = 0;
                 }
 
                 if (val > (UINT64_MAX - digit)/base) {
-                        syntax_error("Integer literal overflow");
+                        syntax_error("Integer literal overflow.");
                         while (isdigit(*stream)) {
                                 ++stream;
                         }
@@ -319,12 +325,57 @@ scan_int(void)
                 val = val * base + digit;
                 ++stream;
         }
+
+        return val;
+}
+
+double
+scan_float(void)
+{
+        const char *start;
+        double val;
+
+        start = stream;
+
+        while (isdigit(*stream)) {
+                ++stream;
+        }
+
+        if (*stream == '.') {
+                ++stream;
+        }
+
+        while (isdigit(*stream)) {
+                ++stream;
+        }
+
+        if (tolower(*stream) == 'e') {
+                ++stream;
+                if (*stream == '-' || *stream == '+') {
+                        ++stream;
+                }
+                if (!isdigit(*stream)) {
+                        syntax_error("Expected digit after float literal "
+                                        "exponent, found '%c'.", *stream);
+                }
+                while (isdigit(*stream)) {
+                        ++stream;
+                }
+        }
+
+        val = strtod(start, NULL);
+        if (val == HUGE_VAL || val == -HUGE_VAL) {
+                syntax_error("Float literal overflow.");
+        }
+
         return val;
 }
 
 void
 next_token(void)
 {
+        const char *bookmark;
+
         token.start = stream;
 
         while (isspace(*stream)) {
@@ -332,10 +383,25 @@ next_token(void)
         }
 
         switch (*stream) {
+        case '.':
+                token.kind = TOKEN_FLOAT;
+                token.float_val = scan_float();
+                break;
         case '0': case '1': case '2': case '3': case '4': case '5': case '6':
         case '7': case '8': case '9':
-                token.kind = TOKEN_INT;
-                token.int_val = scan_int();
+                bookmark = stream;
+                while (isdigit(*stream)) {
+                        ++stream;
+                }
+                if (*stream == '.' || tolower(*stream) == 'e') {
+                        stream = bookmark;
+                        token.kind = TOKEN_FLOAT;
+                        token.float_val = scan_float();
+                } else {
+                        stream = bookmark;
+                        token.kind = TOKEN_INT;
+                        token.int_val = scan_int();
+                }
                 break;
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
         case 'h': case 'i': case 'j': case 'k': case 'l': case 'm': case 'n':
@@ -371,6 +437,9 @@ print_token(Token token)
         switch (token.kind) {
         case TOKEN_INT:
                 printf("TOKEN INT: %lu\n", token.int_val);
+                break;
+        case TOKEN_FLOAT:
+                printf("TOKEN FLOAT: %f\n", token.float_val);
                 break;
         case TOKEN_NAME:
                 printf("TOKEN NAME: %.*s\n",
@@ -421,12 +490,14 @@ expect_token(TokenKind kind)
         }
 }
 
-#define assert_token(x)      assert(match_token(x))
-#define assert_token_name(x) assert(token.name == str_intern(x) && \
+#define assert_token(x)       assert(match_token(x))
+#define assert_token_name(x)  assert(token.name == str_intern(x) && \
                                                 match_token(TOKEN_NAME))
-#define assert_token_int(x)  assert(token.int_val == (x) && \
+#define assert_token_int(x)   assert(token.int_val == (x) && \
                                                 match_token(TOKEN_INT))
-#define assert_token_eof()   assert(is_token(0))
+#define assert_token_float(x) assert(token.float_val == (x) && \
+                                                match_token(TOKEN_FLOAT))
+#define assert_token_eof()    assert(is_token(0))
 
 void
 lex_test(void)
@@ -437,6 +508,14 @@ lex_test(void)
         assert_token_int(0xffffffffffffffffULL);
         assert_token_int(042);
         assert_token_int(0xf);
+        assert_token_eof();
+
+        // Float literal tests.
+        init_stream("3.14 .123 42. 3e10");
+        assert_token_float(3.14);
+        assert_token_float(.123);
+        assert_token_float(42.);
+        assert_token_float(3e10);
         assert_token_eof();
 
         const char *str = "XY+(XY)_HELLO1,234+994";
