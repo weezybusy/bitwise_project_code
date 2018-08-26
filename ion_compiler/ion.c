@@ -386,6 +386,59 @@ scan_float(void)
         token.float_val = val;
 }
 
+char escape_to_char[256] = {
+        ['n'] = '\n',
+        ['r'] = '\r',
+        ['t'] = '\t',
+        ['v'] = '\v',
+        ['b'] = '\b',
+        ['a'] = '\a',
+        ['0'] = 0
+};
+
+void
+scan_char(void)
+{
+        uint64_t val;
+
+        assert(*stream == '\'');
+        ++stream;
+
+        if (*stream == '\'') {
+                syntax_error("Char literal cannot be empty.");
+        } else if (*stream == '\n') {
+                syntax_error("Char literal cannot contain newline.");
+        } else if (*stream == '\\') {
+                ++stream;
+                val = escape_to_char[(uint64_t) *stream];
+                if (val == '\0' && *stream != '0') {
+                        syntax_error("Invalid char literal escape '\\%c'.",
+                                        *stream);
+                }
+                ++stream;
+        } else {
+                val = *stream;
+                ++stream;
+        }
+
+        if (*stream != '\'') {
+                syntax_error("Expected closing char quote, got '%c'.",
+                                *stream);
+        } else {
+                ++stream;
+        }
+
+        token.kind = TOKEN_INT;
+        token.int_val = val;
+        token.mod = TOKENMOD_CHAR;
+}
+
+void
+scan_str(void)
+{
+        assert(0);
+}
+
 void
 next_token(void)
 {
@@ -397,6 +450,12 @@ next_token(void)
         token.mod = TOKENMOD_NONE;
 
         switch (*stream) {
+        case '\'':
+                scan_char();
+                break;
+        case '"':
+                scan_str();
+                break;
         case '.':
                 scan_float();
                 break;
@@ -528,6 +587,13 @@ lex_test(void)
         assert_token_float(3e10);
         assert_token_eof();
 
+        // Char literal tests.
+        init_stream("'a' '\\n'");
+        assert_token_int('a');
+        assert_token_int('\n');
+        assert_token_eof();
+
+        // Misc tests.
         const char *str = "XY+(XY)_HELLO1,234+994";
         init_stream(str);
         assert_token_name("XY");
@@ -554,7 +620,6 @@ run_tests(void)
         buf_test();
         lex_test();
         str_intern_test();
-        // parse_test();
 }
 
 int
