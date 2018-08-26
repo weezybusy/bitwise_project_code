@@ -186,6 +186,14 @@ typedef enum TokenKind {
         // ...
 } TokenKind;
 
+typedef enum TokenMod {
+        TOKENMOD_NONE,
+        TOKENMOD_BIN,
+        TOKENMOD_OCT,
+        TOKENMOD_HEX,
+        TOKENMOD_CHAR
+} TokenMod;
+
 size_t
 copy_token_kind_str(char *dest, size_t dest_size, TokenKind kind)
 {
@@ -232,6 +240,7 @@ token_kind_str(TokenKind kind)
 
 typedef struct Token {
         TokenKind kind;
+        TokenMod mod;
         const char *start;
         const char *end;
         union {
@@ -276,7 +285,7 @@ uint8_t char_to_digit[256] = {
         ['f'] = 15, ['F'] = 15
 };
 
-uint64_t
+void
 scan_int(void)
 {
         uint64_t base;
@@ -288,14 +297,17 @@ scan_int(void)
 
         if (*stream == '0') {
                 ++stream;
-                if (tolower(*stream) == 'x') {
-                        ++stream;
-                        base = 16;
-                } else if (tolower(*stream) == 'b') {
+                if (tolower(*stream) == 'b') {
                         ++stream;
                         base = 2;
+                        token.mod = TOKENMOD_BIN;
                 } else if (isdigit(*stream)) {
                         base = 8;
+                        token.mod = TOKENMOD_OCT;
+                } else if (tolower(*stream) == 'x') {
+                        ++stream;
+                        base = 16;
+                        token.mod = TOKENMOD_HEX;
                 } else {
                         syntax_error("Invalid integer literal suffix '%c'.",
                                         *stream);
@@ -305,6 +317,7 @@ scan_int(void)
 
         while (1) {
                 digit = char_to_digit[(int) *stream];
+
                 if (digit == 0 && *stream != '0') {
                         break;
                 }
@@ -326,10 +339,11 @@ scan_int(void)
                 ++stream;
         }
 
-        return val;
+        token.kind = TOKEN_INT;
+        token.int_val = val;
 }
 
-double
+void
 scan_float(void)
 {
         const char *start;
@@ -368,39 +382,35 @@ scan_float(void)
                 syntax_error("Float literal overflow.");
         }
 
-        return val;
+        token.kind = TOKEN_FLOAT;
+        token.float_val = val;
 }
 
 void
 next_token(void)
 {
-        const char *bookmark;
-
-        token.start = stream;
-
         while (isspace(*stream)) {
                 ++stream;
         }
 
+        token.start = stream;
+        token.mod = TOKENMOD_NONE;
+
         switch (*stream) {
         case '.':
-                token.kind = TOKEN_FLOAT;
-                token.float_val = scan_float();
+                scan_float();
                 break;
         case '0': case '1': case '2': case '3': case '4': case '5': case '6':
         case '7': case '8': case '9':
-                bookmark = stream;
                 while (isdigit(*stream)) {
                         ++stream;
                 }
                 if (*stream == '.' || tolower(*stream) == 'e') {
-                        stream = bookmark;
-                        token.kind = TOKEN_FLOAT;
-                        token.float_val = scan_float();
+                        stream = token.start;
+                        scan_float();
                 } else {
-                        stream = bookmark;
-                        token.kind = TOKEN_INT;
-                        token.int_val = scan_int();
+                        stream = token.start;
+                        scan_int();
                 }
                 break;
         case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
