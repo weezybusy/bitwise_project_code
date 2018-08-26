@@ -182,8 +182,8 @@ typedef enum TokenKind {
         TOKEN_LAST_CHAR = 127,
         TOKEN_INT,
         TOKEN_FLOAT,
+        TOKEN_STR,
         TOKEN_NAME
-        // ...
 } TokenKind;
 
 typedef enum TokenMod {
@@ -246,6 +246,7 @@ typedef struct Token {
         union {
                 uint64_t int_val;
                 double float_val;
+                const char *str_val;
                 const char *name;
         };
 } Token;
@@ -399,7 +400,7 @@ char escape_to_char[256] = {
 void
 scan_char(void)
 {
-        uint64_t val;
+        char val;
 
         assert(*stream == '\'');
         ++stream;
@@ -410,7 +411,7 @@ scan_char(void)
                 syntax_error("Char literal cannot contain newline.");
         } else if (*stream == '\\') {
                 ++stream;
-                val = escape_to_char[(uint64_t) *stream];
+                val = escape_to_char[(int) *stream];
                 if (val == '\0' && *stream != '0') {
                         syntax_error("Invalid char literal escape '\\%c'.",
                                         *stream);
@@ -436,7 +437,39 @@ scan_char(void)
 void
 scan_str(void)
 {
-        assert(0);
+        char val;
+        char *str;
+
+        str = NULL;
+        assert(*stream == '\"');
+        ++stream;
+
+        while (*stream && *stream != '\"') {
+                val = *stream;
+                if (val == '\n') {
+                        syntax_error("String literal cannot contain newline.");
+                } else if (val == '\\') {
+                        ++stream;
+                        val = escape_to_char[(int) *stream];
+                        if (val == 0 && *stream != '0') {
+                                syntax_error("Invalid string literal escape "
+                                                "'\\%c'.", *stream);
+                        }
+                }
+                buf_push(str, val);
+                ++stream;
+        }
+
+        if (*stream) {
+                assert(*stream == '\"');
+                ++stream;
+        } else {
+                syntax_error("Unexpected end of file within string literal.");
+        }
+
+        buf_push(str, 0);
+        token.kind = TOKEN_STR;
+        token.str_val = str;
 }
 
 void
@@ -566,6 +599,8 @@ expect_token(TokenKind kind)
                                                 match_token(TOKEN_INT))
 #define assert_token_float(x) assert(token.float_val == (x) && \
                                                 match_token(TOKEN_FLOAT))
+#define assert_token_str(x)   assert(strcmp(token.str_val, (x)) == 0 && \
+                                                match_token(TOKEN_STR))
 #define assert_token_eof()    assert(is_token(0))
 
 void
@@ -591,6 +626,12 @@ lex_test(void)
         init_stream("'a' '\\n'");
         assert_token_int('a');
         assert_token_int('\n');
+        assert_token_eof();
+
+        // String literal tests.
+        init_stream("\"foo\" \"a\\nb\"");
+        assert_token_str("foo");
+        assert_token_str("a\nb");
         assert_token_eof();
 
         // Misc tests.
