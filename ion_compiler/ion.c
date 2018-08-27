@@ -309,10 +309,6 @@ scan_int(void)
                         ++stream;
                         base = 16;
                         token.mod = TOKENMOD_HEX;
-                } else {
-                        syntax_error("Invalid integer literal suffix '%c'.",
-                                        *stream);
-                        ++stream;
                 }
         }
 
@@ -607,7 +603,8 @@ void
 lex_test(void)
 {
         // Integer literal tests.
-        init_stream("18446744073709551615 0xffffffffffffffff 042 0b1111");
+        init_stream("0 18446744073709551615 0xffffffffffffffff 042 0b1111");
+        assert_token_int(0);
         assert_token_int(18446744073709551615ULL);
         assert_token_int(0xffffffffffffffffULL);
         assert_token_int(042);
