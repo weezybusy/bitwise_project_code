@@ -471,6 +471,8 @@ scan_str(void)
 void
 next_token(void)
 {
+        char c;
+
         while (isspace(*stream)) {
                 ++stream;
         }
@@ -493,11 +495,11 @@ next_token(void)
                 while (isdigit(*stream)) {
                         ++stream;
                 }
-                if (*stream == '.' || tolower(*stream) == 'e') {
-                        stream = token.start;
+                c = *stream;
+                stream = token.start;
+                if (c == '.' || tolower(c) == 'e') {
                         scan_float();
                 } else {
-                        stream = token.start;
                         scan_int();
                 }
                 break;
