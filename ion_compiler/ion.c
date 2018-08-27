@@ -586,7 +586,11 @@ next_token(void)
                         ++stream;
                 }
                 break;
+        CASE1('^', '=', TOKEN_XOR_ASSIGN);
         CASE1(':', '=', TOKEN_COLON_ASSIGN);
+        CASE1('/', '=', TOKEN_DIV_ASSIGN);
+        CASE1('*', '=', TOKEN_MUL_ASSIGN);
+        CASE1('%', '=', TOKEN_MOD_ASSIGN);
         CASE2('-', '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC);
         CASE2('+', '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC);
         CASE2('&', '=', TOKEN_AND_ASSIGN, '|', TOKEN_AND);
@@ -715,7 +719,8 @@ lex_test(void)
         assert_token_eof();
 
         // Operator tests.
-        init_stream(": := + += - -= -- ++ < <= << <<= > >= >> >>=");
+        init_stream(": := + += - -= -- ++ < <= << <<= > >= >> >>= ^ ^= / /= "
+                        "* *= % %=");
         assert_token(':');
         assert_token(TOKEN_COLON_ASSIGN);
         assert_token('+');
@@ -732,6 +737,14 @@ lex_test(void)
         assert_token(TOKEN_GTEQ);
         assert_token(TOKEN_RSHIFT);
         assert_token(TOKEN_RSHIFT_ASSIGN);
+        assert_token('^');
+        assert_token(TOKEN_XOR_ASSIGN);
+        assert_token('/');
+        assert_token(TOKEN_DIV_ASSIGN);
+        assert_token('*');
+        assert_token(TOKEN_MUL_ASSIGN);
+        assert_token('%');
+        assert_token(TOKEN_MOD_ASSIGN);
         assert_token_eof();
 
         // Misc tests.
