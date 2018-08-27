@@ -597,6 +597,7 @@ expect_token(TokenKind kind)
                                                 match_token(TOKEN_FLOAT))
 #define assert_token_str(x)   assert(strcmp(token.str_val, (x)) == 0 && \
                                                 match_token(TOKEN_STR))
+#define assert_token_mod(x)   assert(token.mod == (x));
 #define assert_token_eof()    assert(is_token(0))
 
 void
@@ -606,7 +607,9 @@ lex_test(void)
         init_stream("0 18446744073709551615 0xffffffffffffffff 042 0b1111");
         assert_token_int(0);
         assert_token_int(18446744073709551615ULL);
+        assert_token_mod(TOKENMOD_HEX);
         assert_token_int(0xffffffffffffffffULL);
+        assert_token_mod(TOKENMOD_OCT);
         assert_token_int(042);
         assert_token_int(0xf);
         assert_token_eof();
