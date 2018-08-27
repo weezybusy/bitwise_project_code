@@ -558,9 +558,39 @@ next_token(void)
                 token.kind = TOKEN_NAME;
                 token.name = str_intern_range(token.start, stream);
                 break;
+        case '<':
+                token.kind = *stream++;
+                if (*stream == '<') {
+                        token.kind = TOKEN_LSHIFT;
+                        ++stream;
+                        if (*stream == '=') {
+                                token.kind = TOKEN_LSHIFT_ASSIGN;
+                                ++stream;
+                        }
+                } else if (*stream == '=') {
+                        token.kind = TOKEN_LTEQ;
+                        ++stream;
+                }
+                break;
+        case '>':
+                token.kind = *stream++;
+                if (*stream == '>') {
+                        token.kind = TOKEN_RSHIFT;
+                        ++stream;
+                        if (*stream == '=') {
+                                token.kind = TOKEN_RSHIFT_ASSIGN;
+                                ++stream;
+                        }
+                } else if (*stream == '=') {
+                        token.kind = TOKEN_GTEQ;
+                        ++stream;
+                }
+                break;
         CASE1(':', '=', TOKEN_COLON_ASSIGN);
         CASE2('-', '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC);
         CASE2('+', '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC);
+        CASE2('&', '=', TOKEN_AND_ASSIGN, '|', TOKEN_AND);
+        CASE2('|', '=', TOKEN_OR_ASSIGN, '|', TOKEN_OR);
         default:
                 token.kind = *stream++;
                 break;
@@ -685,7 +715,7 @@ lex_test(void)
         assert_token_eof();
 
         // Operator tests.
-        init_stream(": := + += - -= -- ++");
+        init_stream(": := + += - -= -- ++ < <= << <<= > >= >> >>=");
         assert_token(':');
         assert_token(TOKEN_COLON_ASSIGN);
         assert_token('+');
@@ -694,6 +724,14 @@ lex_test(void)
         assert_token(TOKEN_SUB_ASSIGN);
         assert_token(TOKEN_DEC);
         assert_token(TOKEN_INC);
+        assert_token('<');
+        assert_token(TOKEN_LTEQ);
+        assert_token(TOKEN_LSHIFT);
+        assert_token(TOKEN_LSHIFT_ASSIGN);
+        assert_token('>');
+        assert_token(TOKEN_GTEQ);
+        assert_token(TOKEN_RSHIFT);
+        assert_token(TOKEN_RSHIFT_ASSIGN);
         assert_token_eof();
 
         // Misc tests.
