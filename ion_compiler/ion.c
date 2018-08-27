@@ -177,13 +177,34 @@ str_intern_test()
 }
 
 typedef enum TokenKind {
-        END_OF_FILE = 0,
+        TOKEN_EOF = 0,
         // Reserve first 128 values for one-char tokens.
         TOKEN_LAST_CHAR = 127,
         TOKEN_INT,
         TOKEN_FLOAT,
         TOKEN_STR,
-        TOKEN_NAME
+        TOKEN_NAME,
+        TOKEN_LSHIFT,
+        TOKEN_RSHIFT,
+        TOKEN_EQ,
+        TOKEN_NOTEQ,
+        TOKEN_LTEQ,
+        TOKEN_GTEQ,
+        TOKEN_AND,
+        TOKEN_OR,
+        TOKEN_INC,
+        TOKEN_DEC,
+        TOKEN_COLON_ASSIGN,
+        TOKEN_ADD_ASSIGN,
+        TOKEN_SUB_ASSIGN,
+        TOKEN_OR_ASSIGN,
+        TOKEN_AND_ASSIGN,
+        TOKEN_XOR_ASSIGN,
+        TOKEN_LSHIFT_ASSIGN,
+        TOKEN_RSHIFT_ASSIGN,
+        TOKEN_MUL_ASSIGN,
+        TOKEN_DIV_ASSIGN,
+        TOKEN_MOD_ASSIGN
 } TokenKind;
 
 typedef enum TokenMod {
@@ -202,7 +223,7 @@ copy_token_kind_str(char *dest, size_t dest_size, TokenKind kind)
         n = 0;
 
         switch (kind) {
-        case END_OF_FILE:
+        case TOKEN_EOF:
                 n = snprintf(dest, dest_size, "end of file");
                 break;
         case TOKEN_INT:
@@ -468,6 +489,27 @@ scan_str(void)
         token.str_val = str;
 }
 
+#define CASE1(c, c1, k1)                    \
+        case c:                             \
+                token.kind = *stream++;     \
+                if (*stream == c1) {        \
+                        token.kind = k1;    \
+                        ++stream;           \
+                }                           \
+                break;                      \
+
+#define CASE2(c, c1, k1, c2, k2)            \
+        case c:                             \
+                token.kind = *stream++;     \
+                if (*stream == c1) {        \
+                        token.kind = k1;    \
+                        ++stream;           \
+                } else if (*stream == c2) { \
+                        token.kind = k2;    \
+                        ++stream;           \
+                }                           \
+                break;                      \
+
 void
 next_token(void)
 {
@@ -512,10 +554,13 @@ next_token(void)
         case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T': case 'U':
         case 'V': case 'W': case 'X': case 'Y': case 'Z': case '_':
                 while (isalnum(*stream) || *stream == '_')
-                        stream++;
+                        ++stream;
                 token.kind = TOKEN_NAME;
                 token.name = str_intern_range(token.start, stream);
                 break;
+        CASE1(':', '=', TOKEN_COLON_ASSIGN);
+        CASE2('-', '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC);
+        CASE2('+', '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC);
         default:
                 token.kind = *stream++;
                 break;
@@ -523,6 +568,9 @@ next_token(void)
 
         token.end = stream;
 }
+
+#undef CASE1
+#undef CASE2
 
 void
 init_stream(const char *str)
@@ -634,6 +682,18 @@ lex_test(void)
         init_stream("\"foo\" \"a\\nb\"");
         assert_token_str("foo");
         assert_token_str("a\nb");
+        assert_token_eof();
+
+        // Operator tests.
+        init_stream(": := + += - -= -- ++");
+        assert_token(':');
+        assert_token(TOKEN_COLON_ASSIGN);
+        assert_token('+');
+        assert_token(TOKEN_ADD_ASSIGN);
+        assert_token('-');
+        assert_token(TOKEN_SUB_ASSIGN);
+        assert_token(TOKEN_DEC);
+        assert_token(TOKEN_INC);
         assert_token_eof();
 
         // Misc tests.
