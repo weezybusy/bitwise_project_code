@@ -1,10 +1,13 @@
 Grouping tokens:
+---------------
 ( ) [ ] { }
 
 Unary operators:
+---------------
 + - ! ~ & * 
 
 Binary operators:
+----------------
 LSHIFT = '<<'
 RSHIFT = '>>'
 EQ     = '=='
@@ -21,9 +24,11 @@ AND
 OR
 
 Ternary operators:
+-----------------
 ? :
 
 Assignment operators:
+--------------------
 COLON_ASSIGN  = ':='
 ADD_ASSIGN    = '+='
 SUB_ASSIGN    = '-='
@@ -38,15 +43,17 @@ MOD_ASSIGN    = '%='
 INC           = '++'
 DEC           = '--'
 
-Names/literals:
+Names / literals:
+--------------
 NAME  = [a-zA-Z_][a-zA-Z0-9_]*
 INT   = 0 | [1-9][0-9]* | 0[xX][0-9a-fA-F]+ | 0[0-7]+ | 0[bB][0-1]+
 FLOAT = [0-9]*[.]?[0-9]*([eE][+-]?[0-9]+)?
 CHAR  = '\'' . '\''
 STR  = '"' [^"]* '"'
 
-AST S-expression format:
------------------------
+-------------------------------------------------------------------------------
+                          AST S-expression format
+-------------------------------------------------------------------------------
 
 func fact(n: int): int {
     if (n == 0) {
@@ -64,10 +71,12 @@ func fact(n: int): int {
     (return (* n (fact (- n 1)))))))
 
 
-EBNF grammar:
-------------
+-------------------------------------------------------------------------------
+                                 EBNF grammar
+-------------------------------------------------------------------------------
 
 Declarations:
+------------
 
 type_list = type (',' type)*
 name_list = NAME (',' NAME)*
@@ -103,7 +112,9 @@ decl = 'enum' enum_decl
      | 'typedef typedef_decl
      | 'func' func_decl
 
+
 Statements:
+----------
 
 assign_op = '='
           | COLON_ASSIGN
@@ -131,3 +142,31 @@ stmt = 'return' expr ';'
      | '{' stmt* '};
      | 'switch' '(' expr ')' switch_block
      | expr (INC | DEC | assign_op expr)? 
+
+
+Expressions:
+-----------
+
+typespec = NAME | '(' ':' type ')'
+
+operand_expr = INT
+             | FLOAT
+             | STR
+             | NAME
+             | typespec? '{' expr_list '}'
+             | CAST '(' type ')' expr
+             | '(' expr ')'
+base_expr = operand_expr ('(' expr_list ')' | '[' expr ']' | '.' NAME)*
+unary_expr = [+-&*]unary_expr
+           | base_expr
+
+mul_op = '*' | '/' | '%' | & | LSHIFT | RSHIFT
+mul_expr = unary_expr (mul_op unary_expr)*
+add_op = '+' | '-' | '|' | '^'
+add_expr = mul_expr (add_op mul_expr)*
+cmp_op = EQ | NOTEQ | < | LTEQ | > | GTEQ
+cmp_expr = mul_expr (cmp_op mul_expr)*
+and_expr = cmp_expr (AND cmp_expr)*
+or_expr = and_expr (OR and_expr)*
+ternary_expr = or_expr('?' ternary_expr ':' ternary_expr)?
+expr = ternary_expr
