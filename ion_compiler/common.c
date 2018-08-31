@@ -140,3 +140,10 @@ intern_test()
         const char *pz = str_intern(z);
         assert(pz != px);
 }
+
+void
+common_test()
+{
+        buf_test();
+        intern_test();
+}

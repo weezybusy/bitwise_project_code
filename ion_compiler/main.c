@@ -4,8 +4,7 @@
 void
 run_tests(void)
 {
-        //buf_test();
-        //intern_test();
+        common_test();
         lex_test();
 }
 

@@ -63,4 +63,7 @@ str_intern(const char *str);
 void
 intern_test();
 
+void
+common_test();
+
 #endif
