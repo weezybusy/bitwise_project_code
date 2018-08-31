@@ -360,7 +360,7 @@ print_token(Token token)
 {
         switch (token.kind) {
         case TOKEN_INT:
-                printf("TOKEN INT: %lu\n", token.int_val);
+                printf("TOKEN INT: %" PRIu64 "\n", token.int_val);
                 break;
         case TOKEN_FLOAT:
                 printf("TOKEN FLOAT: %f\n", token.float_val);

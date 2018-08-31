@@ -1,6 +1,7 @@
 #ifndef _LEX_H_
 #define _LEX_H_
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
