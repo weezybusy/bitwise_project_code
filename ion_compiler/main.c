@@ -1,3 +1,4 @@
+#include "ast.h"
 #include "common.h"
 #include "lex.h"
 
@@ -6,6 +7,7 @@ run_tests(void)
 {
         common_test();
         lex_test();
+        ast_test();
 }
 
 int
