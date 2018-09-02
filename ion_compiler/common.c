@@ -14,6 +14,19 @@ xmalloc(size_t num_bytes)
 }
 
 void *
+xcalloc(size_t num_items, size_t item_size)
+{
+        void *ptr;
+
+        ptr = calloc(num_items, item_size);
+        if (ptr == NULL) {
+                perror("xcalloc: failed to allocate memory");
+                exit(EXIT_FAILURE);
+        }
+        return ptr;
+}
+
+void *
 xrealloc(void *ptr, size_t num_bytes)
 {
         ptr = realloc(ptr, num_bytes);
