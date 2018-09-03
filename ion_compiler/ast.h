@@ -22,16 +22,20 @@ typedef enum TypespecKind {
 } TypespecKind;
 
 typedef struct FuncTypespec {
-        BUF(Typespec **arg_types);
-        Typespec *ret_type;
+        size_t num_args;
+        Typespec **args;
+        Typespec *ret;
 } FuncTypespec;
 
 typedef struct Typespec {
         TypespecKind kind;
         struct {
                 const char *name;
-                Expr *index;
                 FuncTypespec func;
+                struct {
+                        Typespec *base;
+                        Expr *size;
+                };
         };
 } Typespec;
 
@@ -48,6 +52,7 @@ typedef enum DeclKind {
 
 typedef struct EnumItem {
         const char *name;
+        size_t names;
         Typespec *type;
 } EnumItem;
 
@@ -62,7 +67,8 @@ typedef struct FuncParam {
 } FuncParam;
 
 typedef struct FuncDecl {
-        BUF(FuncParam *params); // BUF
+        FuncParam *params;
+        size_t num_params;
         Typespec *ret_type;
 } FuncDecl;
 
@@ -70,8 +76,14 @@ struct Decl {
         DeclKind kind;
         const char *name;
         union {
-                BUF(EnumItem *enum_items); // BUF
-                BUF(AggregateItem *aggregate_items); // BUF
+                struct {
+                        size_t num_enum_items;
+                        EnumItem *enum_items;
+                };
+                struct {
+                        size_t num_aggregate_items;
+                        AggregateItem *aggregate_items;
+                };
                 struct {
                         Typespec *type;
                         Expr *expr;
@@ -109,8 +121,9 @@ struct Expr {
 
                 // Compound literals.
                 struct {
+                        size_t num_compound_args;
                         Typespec *compound_type;
-                        BUF(Expr **compound_args); // BUF
+                        Expr **compound_args;
                 };
 
                 // Casts.
@@ -123,7 +136,10 @@ struct Expr {
                 struct {
                         Expr *operand;
                         union {
-                                BUF(Expr **args); // BUF
+                                struct {
+                                        size_t num_args;
+                                        Expr **args;
+                                };
                                 Expr *index;
                                 const char *field;
                         };
@@ -161,7 +177,8 @@ typedef enum StmtKind {
 } StmtKind;
 
 typedef struct StmtBlock {
-        BUF(Stmt **stmts);
+        size_t num_stmts;
+        Stmt **stmts;
 } StmtBlock;
 
 typedef struct ElseIf {
@@ -170,7 +187,8 @@ typedef struct ElseIf {
 } ElseIf;
 
 typedef struct Case {
-        BUF(Expr **exprs);
+        size_t num_exprs;
+        Expr **exprs;
         StmtBlock block;
 } Case;
 
@@ -181,7 +199,8 @@ struct Stmt {
         union {
                 // If.
                 struct {
-                        BUF(ElseIf *elseifs);
+                        size_t num_elseifs;
+                        ElseIf *elseifs;
                         StmtBlock else_block;
                 };
                 // For.
@@ -191,7 +210,8 @@ struct Stmt {
                 };
                 // Switch.
                 struct {
-                        BUF(Case *cases);
+                        size_t num_cases;
+                        Case *cases;
                 };
                 // Auto-assign.
                 struct {
@@ -203,6 +223,21 @@ struct Stmt {
                 };
         };
 };
+
+Typespec *
+typespec_alloc(TypespecKind kind);
+
+Typespec *
+typespec_name(const char *name);
+
+Typespec *
+Typespec_pointer(Typespec *base);
+
+Typespec *
+Typespec_array(Typespec *base, Expr *size);
+
+Typespec *
+Typespec_func(FuncTypespec func);
 
 Expr *
 expr_alloc(ExprKind kind);
@@ -223,6 +258,15 @@ Expr *
 expr_cast(Typespec *type, Expr *expr);
 
 Expr *
+expr_call(Expr *operand, size_t num_args, Expr **args);
+
+Expr *
+expr_index(Expr *operand, Expr *index);
+
+Expr *
+expr_field(Expr *operand, const char *field);
+
+Expr *
 expr_unary(TokenKind op, Expr *expr);
 
 Expr *
@@ -232,10 +276,16 @@ Expr *
 expr_ternary(Expr *cond, Expr *then_expr, Expr *else_expr);
 
 void
+print_type(Typespec *type);
+
+void
 print_expr(Expr *expr);
 
 void
-expr_text(void);
+print_expr_line(Expr *expr);
+
+void
+expr_test(void);
 
 void
 ast_test(void);

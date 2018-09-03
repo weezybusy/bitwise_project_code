@@ -1,5 +1,61 @@
 #include "ast.h"
 
+Typespec *
+typespec_alloc(TypespecKind kind)
+{
+        Typespec *type;
+
+        type = xcalloc(1, sizeof(Typespec));
+        type->kind = kind;
+
+        return type;
+}
+
+Typespec *
+typespec_name(const char *name)
+{
+        Typespec *type;
+
+        type = typespec_alloc(TYPESPEC_NAME);
+        type->name = name;
+
+        return type;
+}
+
+Typespec *
+typespec_pointer(Typespec *base)
+{
+        Typespec *type;
+
+        type = typespec_alloc(TYPESPEC_POINTER);
+        type->base = base;
+
+        return type;
+}
+
+Typespec *
+typespec_array(Typespec *base, Expr *size)
+{
+        Typespec *type;
+
+        type = typespec_alloc(TYPESPEC_ARRAY);
+        type->base = base;
+        type->size = size;
+
+        return type;
+}
+
+Typespec *
+typespec_func(FuncTypespec func)
+{
+        Typespec *type;
+
+        type = typespec_alloc(TYPESPEC_FUNC);
+        type->func = func;
+
+        return type;
+}
+
 Expr *
 expr_alloc(ExprKind kind)
 {
@@ -68,6 +124,49 @@ expr_cast(Typespec *type, Expr *expr)
 }
 
 Expr *
+expr_call(Expr *operand, size_t num_args, Expr **args)
+{
+        Expr *expr;
+
+        expr = expr_alloc(EXPR_CALL);
+        expr->operand = operand;
+        expr->num_args = num_args;
+        expr->args = args;
+
+        return expr;
+}
+
+Expr *
+expr_index(Expr *operand, Expr *index)
+{
+        Expr *expr;
+
+        expr = expr_alloc(EXPR_INDEX);
+        expr->operand = operand;
+        expr->index = index;
+
+        return expr;
+}
+
+Expr *
+expr_field(Expr *operand, const char *field)
+{
+        Expr *expr;
+
+        expr = expr_alloc(EXPR_FIELD);
+        expr->operand = operand;
+        expr->field = field;
+
+        return expr;
+}
+
+Expr *
+expr_func(void)
+{
+        assert(0);
+}
+
+Expr *
 expr_unary(TokenKind op, Expr *expr)
 {
         Expr *new_expr;
@@ -106,12 +205,46 @@ expr_ternary(Expr *cond, Expr *then_expr, Expr *else_expr)
 }
 
 void
+print_type(Typespec *type)
+{
+        switch (type->kind) {
+        case TYPESPEC_NAME:
+                printf("%s", type->name);
+                break;
+        case TYPESPEC_FUNC: {
+                FuncTypespec func = type->func;
+                printf("(func (");
+                for (Typespec **t = func.args; t != func.args + func.num_args; ++t) {
+                       printf(" ");
+                       print_type(*t);
+                }
+                printf(") ");
+                print_type(func.ret);
+                printf(")");
+                break;
+        }
+        case TYPESPEC_ARRAY:
+                printf("(arr ");
+                print_type(type->base);
+                printf(" ");
+                print_expr(type->size);
+                printf(")");
+                break;
+        case TYPESPEC_POINTER:
+                printf("(ptr ");
+                print_type(type->base);
+                printf(")");
+                break;
+        default:
+                assert(0);
+                break;
+        }
+}
+
+void
 print_expr(Expr *expr)
 {
         switch (expr->kind) {
-        case EXPR_NONE:
-                assert(0);
-                break;
         case EXPR_INT:
                 printf("%" PRIu64, expr->int_val);
                 break;
@@ -126,7 +259,7 @@ print_expr(Expr *expr)
                 break;
         case EXPR_CAST:
                 printf("(cast ");
-                //print_type(expr->cast_type);
+                print_type(expr->cast_type);
                 printf(" ");
                 print_expr(expr->cast_expr);
                 printf(")");
@@ -134,7 +267,7 @@ print_expr(Expr *expr)
         case EXPR_CALL:
                 printf("(");
                 print_expr(expr->operand);
-                for (Expr **it = expr->args; it != buf_end(expr->args); ++it) {
+                for (Expr **it = expr->args; it != expr->args + expr->num_args; ++it) {
                         printf(" ");
                         print_expr(*it);
                 }
@@ -151,6 +284,7 @@ print_expr(Expr *expr)
                 printf("(field ");
                 print_expr(expr->operand);
                 printf(" %s", expr->field);
+                printf(")");
                 break;
         case EXPR_COMPOUND:
                 printf("(compound ...)");
@@ -183,15 +317,30 @@ print_expr(Expr *expr)
 }
 
 void
+print_expr_line(Expr *expr)
+{
+        print_expr(expr);
+        printf("\n");
+}
+
+void
 expr_test(void)
 {
-        Expr *expr;
+        Expr *exprs[] = {
+                expr_binary('+', expr_int(1), expr_int(2)),
+                expr_unary('-', expr_float(3.14)),
+                expr_ternary(expr_name("flag"), expr_str("true"),
+                                expr_str("false")),
+                expr_field(expr_name("person"), "name"),
+                expr_call(expr_name("fact"), 1, (Expr * []) { expr_int(42) }),
+                expr_index(expr_field(expr_name("person"), "siblings"),
+                                expr_int(3)),
+                expr_cast(typespec_name("int_ptr"), expr_name("void_ptr"))
+        };
 
-        //expr = expr_int(42);
-        //assert(expr->kind == EXPR_INT);
-        //assert(expr->int_val == 42);
-        expr = expr_binary('+', expr_int(1), expr_int(2));
-        print_expr(expr);
+        for (Expr **e = exprs; e != exprs + sizeof(exprs)/sizeof(*exprs); ++e) {
+                print_expr_line(*e);
+        }
 }
 
 void
