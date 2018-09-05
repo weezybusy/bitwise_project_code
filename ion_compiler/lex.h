@@ -67,7 +67,8 @@ typedef enum TokenKind {
         TOKEN_RSHIFT_ASSIGN,
         TOKEN_MUL_ASSIGN,
         TOKEN_DIV_ASSIGN,
-        TOKEN_MOD_ASSIGN
+        TOKEN_MOD_ASSIGN,
+        TOKEN_KEYWORD
 } TokenKind;
 
 typedef enum TokenMod {

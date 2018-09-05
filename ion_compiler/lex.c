@@ -298,8 +298,9 @@ next_token(void)
         case 'H': case 'I': case 'J': case 'K': case 'L': case 'M': case 'N':
         case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T': case 'U':
         case 'V': case 'W': case 'X': case 'Y': case 'Z': case '_':
-                while (isalnum(*stream) || *stream == '_')
+                while (isalnum(*stream) || *stream == '_') {
                         ++stream;
+                }
                 token.kind = TOKEN_NAME;
                 token.name = str_intern_range(token.start, stream);
                 break;
